@@ -17,6 +17,11 @@ after { puts; }                                                                 
 
 events_table = DB.from(:events)
 rsvps_table = DB.from(:rsvps)
+users_table = DB.from(:users)
+
+before do
+    @current_user = users_table.where(id: session["user_id"]).to_a[0]
+end
 
 get "/" do
     puts events_table.all
@@ -28,6 +33,7 @@ get "/events/:id" do
     @event = events_table.where(id: params[:id]).to_a[0]
     @rsvps = rsvps_table.where(event_id: @event[:id])
     @going_count = rsvps_table.where(event_id: @event[:id]).sum(:going)
+    @users_table = users_table
     view "event"
 end
 
@@ -37,6 +43,12 @@ get "/events/:id/rsvps/new" do
 end
 
 get "/events/:id/rsvps/create" do
+    puts params
+    @event = events_table.where(id: params[:id]).to_a[0]
+    rsvps_table.insert(event_id: params["id"],
+                       user_id: session["user_id"],
+                       going: params["going"],
+                       comments: params["comments"])
     view "create_rsvp"
 end
 
@@ -46,6 +58,9 @@ end
 
 get "/users/create" do
     puts params
+    users_table.insert(name: params["name"],
+                       email: params["email"],
+                       password: BCrypt::Password.create(params["password"]))
     view "create_user"
 end
 
@@ -53,11 +68,29 @@ get "/logins/new" do
     view "new_login"
 end
 
-get "/logins/create" do
+post "/logins/create" do
     puts params
-    view "create_login"
+    email_address = params["email"]
+    password = params["password"]
+
+    @user = users_table.where(email: email_address).to_a[0]
+    #is there a user in the users table where the email is equal to the email address?
+    #we will select a user from the users table where the email address is equal to the email. 
+    #need to check it, so use IF statement.
+
+    if @user
+        if BCrypt::Password.new(@user[:password]) == password #see variable defined above, where password = params["password"]
+            session["user_id"] = @user[:id]
+            view "create_login"
+        else 
+            view "create_login_failed"
+        end
+    else 
+        view "create_login_failed"
+    end
 end
 
 get "/logout" do
+    session["user_id"] = nil
     view "logout"
 end
